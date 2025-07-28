@@ -281,7 +281,7 @@ import json
 import re
 from datetime import datetime
 
-from transformers import pipeline
+# from transformers import pipeline
 from openai import OpenAI
 
 # To avoid tokenizer warning from HuggingFace
@@ -290,7 +290,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 app = FastAPI()
 
 # ---- Summarizer ----
-summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6", device=-1)
+# summarizer = pipeline("summarization", model="sshleifer/distilbart-cnn-12-6", device=-1)
 
 # ---- API Keys ----
 ASSEMBLY_API_KEY = "5d8d89d0b1c74d3c92ab8ce0840e35b8"
@@ -309,6 +309,10 @@ app.add_middleware(
 )
 
 HISTORY_FILE = "meeting_history.json"
+
+def get_summarizer():
+    from transformers import pipeline
+    return pipeline("summarization", model="t5-small", device=-1)  # Use lighter model for memory
 
 # ---- Utility Functions ----
 def load_meeting_history():
@@ -349,6 +353,7 @@ def generate_combined_summary(current_summary_text: str, past_summaries: list):
     combined = combined[:3000]
     if len(combined.split()) < 30:
         return current_summary_text
+    summarizer = get_summarizer()
     output = summarizer(combined, max_length=150, min_length=30, do_sample=False)
     return output[0]["summary_text"]
 
@@ -453,6 +458,7 @@ def transcribe_from_file():
         if len(text.split()) < 30:
             summary_text = text
         else:
+            summarizer = get_summarizer()
             summary_output = summarizer(text, max_length=min(len(text.split()), 150), min_length=30, do_sample=False)
             summary_text = summary_output[0]["summary_text"]
 
@@ -530,6 +536,7 @@ async def transcribe(file: UploadFile = File(...)):
             if len(text.split()) < 30:
                 summary_text = text
             else:
+                summarizer = get_summarizer()
                 summary_output = summarizer(text, max_length=min(len(text.split()), 150), min_length=30, do_sample=False)
                 summary_text = summary_output[0]["summary_text"]
 
@@ -559,3 +566,7 @@ async def transcribe(file: UploadFile = File(...)):
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Internal Server Error: {str(e)}"})
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 10000))  # use Render's PORT env if available
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
